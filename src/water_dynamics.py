@@ -6,14 +6,16 @@ Molecular Dynamics for the water box only, 15nm and 20ps simu AND water + fixed 
 
 import os
 import simtk.openmm as openmm
+import simtk.openmm.app as app
+
 
 from simtk.openmm import LangevinIntegrator
 import numpy as np
 
-from simtk.openmm import *
 from simtk.unit import *
+from simtk.openmm import *
 from simtk.openmm.app import *
-from openmmtools import testsystems
+#from openmmtools import testsystems
 
 from sys import stdout
 
@@ -32,20 +34,38 @@ box_edge=15*nanometers
 steps = 1000000
 intervall = 1000
 
-#SYSTEM CREATION
+#PLATFORM
+platform = Platform.getPlatformByName('CUDA')
+properties = {'CudaPrecision': 'mixed'} 
+properties["DeviceIndex"] = "0"
 
-waterbox = testsystems.WaterBox(box_edge, cutoff)
-system = waterbox.system
-positions = waterbox.positions
-topology = waterbox.topology
 
-#INTEGRATOR
+#Forcefields
+force_field=app.ForceField('tip3p.xml')
 
-integrator = LangevinIntegrator( temperature, friction,time_step)
+#empty
+top = app.Topology()
+pos = Quantity((), angstroms)
+
+# Create new Modeller instance.
+m = app.Modeller(top, pos)
+# Add solvent to specified box dimensions.
+boxSize = Quantity(np.ones([3]) * box_edge/nanometers, nanometers)
+m.addSolvent(force_field, boxSize=boxSize)
+
+
+# New positions
+newtop = m.getTopology()
+newpos = m.getPositions()
+
+
+# Create a system
+system = force_field.createSystem(newtop, nonbondedCutoff=cutoff, constraints=app.HBonds,nonbondedMethod=app.PME)
+
 #SIMULATION
-
-simulation = Simulation(topology, system, integrator)
-simulation.context.setPositions(positions)
+integrator = LangevinIntegrator( temperature, friction,time_step)
+simulation = Simulation(newtop, system, integrator, platform, properties)
+simulation.context.setPositions(newpos)
 simulation.minimizeEnergy()
 
 #SAVE EVERY SNAPSHOTS
@@ -59,7 +79,3 @@ for i in range (1,int(steps/intervall)+1):
             potentialEnergy=True, temperature=True))
 
     simulation.step(intervall)
-    #print(f"saved to {'{}'.format(DATA) + pdb_title + '{}.pdb'.format(i)}")
-
-
-#simulation.reporters.append(PDBReporter(ROOT + pdb_title + '{}.pdb'.format(step), intervall)) #./DATA
