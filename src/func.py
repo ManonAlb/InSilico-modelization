@@ -1,10 +1,47 @@
-import requests
 from biopandas.pdb import PandasPdb
 from Bio.PDB import PDBParser
 import os
 
 
-def center_water_and_protein(pdbid, pdb_title):
+
+def clean_protein(pdbid):
+
+    ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
+
+    protein_path = ROOT + '/DYNAMIC/Fixed_protein_in_water' + '/' +  "{}.pdb".format(pdbid)
+    clean_protein = open( ROOT + '/DYNAMIC/Fixed_protein_in_water' + '/' + 'clean_prot.pdb', 'w' )
+
+    with open(protein_path, 'r') as prot :
+        for lines in prot :
+            if lines.startswith('ATOM'):
+                clean_protein.write(lines)
+    return('cleaned')
+
+def translated_protein(pdbid):
+
+    ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
+    clean_protein_path = ROOT + '/DYNAMIC/Fixed_protein_in_water' + '/'
+    ppdb = PandasPdb()
+    ppdb.read_pdb('{}clean_prot.pdb'.format(clean_protein_path))
+
+    y_lenght = ppdb.df['ATOM'].loc[:,'y_coord'].max() - ppdb.df['ATOM'].loc[:,'y_coord'].min()
+    x_lenght = ppdb.df['ATOM'].loc[:,'x_coord'].max() - ppdb.df['ATOM'].loc[:,'x_coord'].min()
+    z_lenght = ppdb.df['ATOM'].loc[:,'z_coord'].max() - ppdb.df['ATOM'].loc[:,'z_coord'].min()
+
+
+    ppdb.df['ATOM'].loc[:,'x_coord'] = (ppdb.df['ATOM'].loc[:,'x_coord']) -ppdb.df['ATOM'].loc[:,'x_coord'].max() + x_lenght/2
+
+    ppdb.df['ATOM'].loc[:,'y_coord'] = ppdb.df['ATOM'].loc[:,'y_coord'] -ppdb.df['ATOM'].loc[:,'y_coord'].max() + y_lenght/2
+
+    ppdb.df['ATOM'].loc[:,'z_coord'] = ppdb.df['ATOM'].loc[:,'z_coord'] -ppdb.df['ATOM'].loc[:,'z_coord'].max() + z_lenght/2
+
+    ppdb.to_pdb('{}translated_{}.pdb'.format(clean_protein_path, pdbid),
+                records=None,
+                gz=False,
+                append_newline=True) #save pdb
+    return('protein centered')
+
+def center_water( pdb_title):
 
     ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
     protein_path = ROOT + '/DYNAMIC/Fixed_protein_in_water/'
@@ -29,62 +66,19 @@ def center_water_and_protein(pdbid, pdb_title):
 
                 ppdb.df['HETATM'].loc[:,'z_coord'] = ppdb.df['HETATM'].loc[:,'z_coord'] -ppdb.df['HETATM'].loc[:,'z_coord'].max() + z_lenght/2
 
-                ppdb.to_pdb( water_path + '/{}'.format(file),
+                ppdb.to_pdb( water_path + '/translated_{}'.format(file),
                 records=None,
                 gz=False,
                 append_newline=True) #save pdb
 
-     #CENTER THE PROTEIN
 
-    pdb_path = ROOT + '/DYNAMIC/Fixed_protein_in_water' + '/' +  f"{pdbid}.pdb"
-    pdb_url = f"https://files.rcsb.org/download/{pdbid}.pdb"
-    r = requests.get(pdb_url)
-    r.raise_for_status()
-
-    with open(pdb_path, "wb") as f:
-            f.write(r.content)
-
-    translated_protein = open( protein_path + 'translated_prot.pdb', 'w' )
-
-    with open(pdb_path, 'r') as ubiq :
-        for lines in ubiq :
-            if lines.startswith('ATOM'):
-                translated_protein.write(lines)
-        translated_protein.close()
-
-
-    ppdb = PandasPdb()
-    ppdb.read_pdb('{}translated_prot.pdb'.format(protein_path))
-
-    y_lenght = ppdb.df['ATOM'].loc[:,'y_coord'].max() - ppdb.df['ATOM'].loc[:,'y_coord'].min()
-    x_lenght = ppdb.df['ATOM'].loc[:,'x_coord'].max() - ppdb.df['ATOM'].loc[:,'x_coord'].min()
-    z_lenght = ppdb.df['ATOM'].loc[:,'z_coord'].max() - ppdb.df['ATOM'].loc[:,'z_coord'].min()
-
-
-    ppdb.df['ATOM'].loc[:,'x_coord'] = (ppdb.df['ATOM'].loc[:,'x_coord']) -ppdb.df['ATOM'].loc[:,'x_coord'].max() + x_lenght/2
-
-    ppdb.df['ATOM'].loc[:,'y_coord'] = ppdb.df['ATOM'].loc[:,'y_coord'] -ppdb.df['ATOM'].loc[:,'y_coord'].max() + y_lenght/2
-
-    ppdb.df['ATOM'].loc[:,'z_coord'] = ppdb.df['ATOM'].loc[:,'z_coord'] -ppdb.df['ATOM'].loc[:,'z_coord'].max() + z_lenght/2
-
-    ppdb.to_pdb('{}/translated_prot.pdb'.format(protein_path),
-                    records=None,
-                    gz=False,
-                    append_newline=True) #save pdb
     return('complete')
 
-center_water_and_protein('1UBQ', 'Water_box')
-
-
-
-#ADDITION
-
-
-def add_protein_still_to_water(protein_name):
+def add_protein_still_to_water(protein_id):
 
 
     ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
-    name = 'translated_prot.pdb'
+    name = 'translated_{}.pdb'.format(protein_id)
     protein_path = ROOT + '/DYNAMIC/Fixed_protein_in_water/'
     water_path = protein_path + 'FRAMES/'
     head = "CRYST1  150.000  150.000  150.000  90.00  90.00  90.00 P 1           1 " # dimension of the box
@@ -98,7 +92,7 @@ def add_protein_still_to_water(protein_name):
 
         if file.startswith(('Water_box')) and file.endswith(('.pdb')):
 
-            output = open( water_path  + protein_name+ '_' + file.strip('/'), 'w')
+            output = open( water_path  + protein_id+ '_' + file.strip('/'), 'w')
 
             #Remove 'END' from water pdb
             frame = open(water_path + file.strip('/'), 'r')
@@ -122,4 +116,8 @@ def add_protein_still_to_water(protein_name):
     return('complete')
 
 
-add_protein_still_to_water( 'ubiquitin' )
+
+clean_protein('1ubq')
+translated_protein('1ubq')
+#center_water('Water_box')
+add_protein_still_to_water( '1ubq' )
