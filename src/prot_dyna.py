@@ -63,8 +63,8 @@ prepared_protein = prepare_protein(pdb_path, ignore_missing_residues=False)
 
 
 pdbid='1ubq'
-step_number=1000000 #duration time = time_step*step number =4ps
-intervall=1000 #save every intervall
+step_number=5 #duration time = time_step*step number =4ps
+intervall = 1 #save every intervall
 
 pdb_title='/{}_in_vacuum_for_{}fs'.format(pdbid, str(step_number/intervall))  # Name of the output pdb
 
@@ -82,7 +82,7 @@ modeller.addHydrogens(forcefield)
 
 system = forcefield.createSystem(modeller.topology, nonbondedMethod=PME, nonbondedCutoff=1*nanometer,constraints=HBonds)
 
-integrator = LangevinIntegrator( 298*kelvin, 1/picosecond,1.0*femtosecond)
+integrator = LangevinIntegrator(298*kelvin, 1/picosecond,1.0*femtosecond)
 
 #simulation
 
@@ -90,16 +90,17 @@ simulation = Simulation(modeller.topology, system, integrator)
 simulation.context.setPositions(modeller.positions)
 simulation.minimizeEnergy(maxIterations=300)
 
+simulation.reporters = [StateDataReporter(stdout, intervall, step=True, potentialEnergy=True, temperature=True)]
 
+n_saved = 0
+for i in range(step_number):
+    simulation.step(1)
 
-for i in range (1,int(step_number/intervall)+1):
-    simulation.reporters = [PDBReporter( ROOT + '/DYNAMIC/Protein/FRAMES'+ pdb_title + '_{}.pdb'.format(i), intervall)]
+    if i % intervall == 0 or i == step_number - 1:
+        reporter = PDBReporter(ROOT + '/DYNAMIC/Protein/FRAMES' + pdb_title + '_{}.pdb'.format(n_saved), 1)
+        state = simulation.context.getState(getPositions=True)
+        reporter.report(simulation, state)
 
-    #REPORTER
-
-    simulation.reporters.append(StateDataReporter(stdout, intervall, step=True,
-            potentialEnergy=True, temperature=True))
-
-    simulation.step(intervall)
+        n_saved += 1
 
 #simulation.saveState('{}'.format(HERE) + '/data/' + 'simulation_vacuum.xml')
